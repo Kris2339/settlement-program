@@ -1,2 +1,2 @@
-# OCC
+# settlement-program
 온컴프로젝트
