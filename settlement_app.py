@@ -148,7 +148,8 @@ def process_return_data(df):
     #    - 기본은 모두 양수(절대값)
     #    - '불량'만 음수로 변환
     df_final[qty_col] = pd.to_numeric(df_final[qty_col], errors='coerce').fillna(0).abs()
-    df_final.loc[df_final['구분(new)'] == '불량', qty_col] *= -1
+    df_final.loc[df_final['구분(new)'] == '반품', qty_col] *= -1
+    df_final.loc[df_final['구분(new)'] == '불량', qty_col] *= 1
 
     # 8) 컬럼 리네임 및 최종 컬럼 순서
     rename_map = {v: k for k, v in config['final_columns'].items() if not k.startswith('_')}
