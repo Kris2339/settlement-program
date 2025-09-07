@@ -125,7 +125,8 @@ def process_return_data(df):
 
     df_return = df.copy()
     df_return['구분(new)'] = '반품'
-    df_return[qty_col] *= -1
+    #0907 여기 수정함
+    df_return[qty_col] *= 1
 
     df_bad_pason = df[df[status_col].isin(config['bad_pason_map'].keys())].copy()
     if not df_bad_pason.empty:
