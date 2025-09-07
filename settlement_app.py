@@ -112,36 +112,52 @@ def process_shipping_data(df):
 
 def process_return_data(df):
     config = CONFIG['rules']['return']
-    if df.empty: return pd.DataFrame()
+    if df.empty:
+        return pd.DataFrame()
 
+    # 1) 이전 달 필터
     df = filter_by_previous_month(df, config['date_col'])
-    if df.empty: return pd.DataFrame()
-    
-    df[config['brand_col']] = df[config['brand_col']].astype(str).str.split(':').str[0].str.strip()
-    df = df[~df[config['brand_col']].isin(CONFIG['general']['excluded_brands'])].copy()
+    if df.empty:
+        return pd.DataFrame()
 
-    qty_col, status_col = config['qty_col'], config['status_col']
+    # 2) 브랜드 정리 및 제외
+    brand_col = config['brand_col']
+    df[brand_col] = df[brand_col].astype(str).str.split(':').str[0].str.strip()
+    df = df[~df[brand_col].isin(CONFIG['general']['excluded_brands'])].copy()
+
+    # 3) 기본 수량/상태 컬럼 처리
+    qty_col = config['qty_col']
+    status_col = config['status_col']
     df[qty_col] = pd.to_numeric(df[qty_col], errors='coerce').fillna(0)
 
+    # 4) 기본 행: 모두 '반품'
     df_return = df.copy()
     df_return['구분(new)'] = '반품'
-    #0907 여기 수정함
-    df_return[qty_col] *= 1
 
+    # 5) 불량/파손 등 상태 매핑된 행: 구분(new) 값을 교체
     df_bad_pason = df[df[status_col].isin(config['bad_pason_map'].keys())].copy()
     if not df_bad_pason.empty:
-      df_bad_pason['구분(new)'] = df_bad_pason[status_col].map(config['bad_pason_map'])
-    
+        df_bad_pason['구분(new)'] = df_bad_pason[status_col].map(config['bad_pason_map'])
+
+    # 6) 합치고 공통 메타 컬럼 추가
     df_final = pd.concat([df_return, df_bad_pason], ignore_index=True)
     df_final['자료출처'] = '삼일 반품데이터'
     df_final['단위'] = 1
-    
-    rename_map = {v: k for k,v in config['final_columns'].items() if not k.startswith('_')}
+
+    # 7) ★ 수량 부호 규칙 ★
+    #    - 기본은 모두 양수(절대값)
+    #    - '불량'만 음수로 변환
+    df_final[qty_col] = pd.to_numeric(df_final[qty_col], errors='coerce').fillna(0).abs()
+    df_final.loc[df_final['구분(new)'] == '불량', qty_col] *= -1
+
+    # 8) 컬럼 리네임 및 최종 컬럼 순서
+    rename_map = {v: k for k, v in config['final_columns'].items() if not k.startswith('_')}
     rename_map.update({'구분(new)': '구분(new)', '자료출처': '자료출처', '단위': '단위(EA)'})
-    
     final_df = df_final.rename(columns=rename_map)
+
     col_order = ['일자', '주문번호', '구분(new)', '구분', '상품코드', '품목명', '단위(EA)', '수량', '자료출처']
-    return final_df[[col for col in col_order if col in final_df.columns]]
+    return final_df[[c for c in col_order if c in final_df.columns]]
+
 
 def process_receiving_data(df):
     config = CONFIG['rules']['receiving']
