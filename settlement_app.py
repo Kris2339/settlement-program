@@ -176,31 +176,47 @@ def process_receiving_data(df):
     for col, val in config['peculiar_filters'].items():
         if col.startswith('_'): continue
         if isinstance(val, list):
-             df_peculiar = df_peculiar[~df_peculiar[col].isin(val)].copy()
+            df_peculiar = df_peculiar[~df_peculiar[col].isin(val)].copy()
         else:
-             df_peculiar = df_peculiar[df_peculiar[col] != val].copy()
+            df_peculiar = df_peculiar[df_peculiar[col] != val].copy()
 
     def finalize(d, cols_map, is_free=False):
         if d.empty: return pd.DataFrame()
         d = d.copy()
         d['자료출처'] = '삼일 입고데이터'
         d['단위'] = 1
-        d['수량'] = pd.to_numeric(d[config['qty_col']], errors='coerce').fillna(0) * -1
-        
-        final_df = d.rename(columns={v:k for k,v in cols_map.items() if not k.startswith('_')})
-        
+
+        # 원본 수량(엑셀 값) 보관
+        qty_src_col = config['qty_col']
+        orig_qty = pd.to_numeric(d[qty_src_col], errors='coerce').fillna(0)
+
+        # ⬇️ 리네임 시 '수량' 매핑은 제외해서 중복 컬럼을 방지
+        rename_map = {v: k for k, v in cols_map.items() if not k.startswith('_') and v != qty_src_col}
+        final_df = d.rename(columns=rename_map)
+
+        # 최종 한 개의 '수량' 컬럼만 생성
         if is_free:
+            # 무상 정상 입고 로직은 기존대로(필요시 조정)
+            # 요청은 '입고 특이사항'에 대한 것이므로 여기서는 원래 로직 유지 가능
+            final_df['수량'] = orig_qty  # 필요하다면 abs()/부호 처리 추가
             final_df['구분(new)'] = final_df['구분'].str.split(' : ').str[1]
         else:
+            # 👉 입고 특이사항: 원본 수량을 그대로 보여주기
+            final_df['수량'] = orig_qty
             final_df['구분(new)'] = '반품'
-        
-        final_cols = ['일자', '주문번호', '구분(new)', '구분', '상품코드', '품목명', '단위(EA)', '수량', '자료출처', '상태', '상품비고', '브랜드']
+
+        # 단위(EA) 등 최종 컬럼 정리
+        final_cols = ['일자', '주문번호', '구분(new)', '구분', '상품코드',
+                      '품목명', '단위(EA)', '수량', '자료출처', '상태', '상품비고', '브랜드']
         for col in final_cols:
             if col not in final_df.columns:
                 final_df[col] = pd.NA
+
         return final_df[final_cols]
-        
-    return finalize(df_peculiar, config['final_columns_peculiar']), finalize(df_free, config['final_columns_free'], True)
+
+    # 반환: (입고 특이사항, 무상 정상 입고)
+    return finalize(df_peculiar, config['final_columns_peculiar']), \
+           finalize(df_free, config['final_columns_free'], True)
 
 
 # --- 3. Streamlit UI 구성 ---
